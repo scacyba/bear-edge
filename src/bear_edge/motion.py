@@ -77,17 +77,26 @@ class MotionDetector:
         diff = cv2.absdiff(gray, self._prev_gray)
         _, fg_diff = cv2.threshold(diff, self.diff_threshold, 255, cv2.THRESH_BINARY)
 
-        combined = cv2.bitwise_and(fg_diff, fg_mog2)
+        # and‚¾‚Æ”’•‚Å‚Í•ß‚Ü‚ç‚È‚¢B
+        #combined = cv2.bitwise_and(fg_diff, fg_mog2)
+        combined = cv2.bitwise_or(fg_diff, fg_mog2)
         combined = cv2.morphologyEx(combined, cv2.MORPH_OPEN, self._kernel, iterations=1)
         combined = cv2.dilate(combined, self._kernel, iterations=1)
 
         num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(combined, connectivity=8)
 
         motion_area_px = 0
+        boxes = []
         for i in range(1, num_labels):
             component_area = int(stats[i, cv2.CC_STAT_AREA])
             if component_area >= self.min_area_px:
                 motion_area_px += component_area
+
+                x = stats[i, cv2.CC_STAT_LEFT]
+                y = stats[i, cv2.CC_STAT_TOP]
+                w = stats[i, cv2.CC_STAT_WIDTH]
+                h = stats[i, cv2.CC_STAT_HEIGHT]
+                boxes.append((x, y, w, h))
 
         frame_motion = motion_area_px >= self.min_area_px
         self._recent_hits.append(frame_motion)
@@ -100,6 +109,7 @@ class MotionDetector:
         debug = {
             "initialized": True,
             "motion_area_px": motion_area_px,
+            "boxes": boxes,
             "area_threshold_px": self.min_area_px,
             "frame_motion": frame_motion,
             "recent_hits": list(self._recent_hits),
