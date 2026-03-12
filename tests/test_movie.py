@@ -1,7 +1,8 @@
 import cv2
 from pathlib import Path
 from bear_edge.motion import MotionDetector
-
+import boto3
+import datetime
 
 VIDEO_PATH = "bear_towada.mp4"
 OUTPUT_DIR = Path("detected_frames")
@@ -9,9 +10,12 @@ OUTPUT_DIR = Path("detected_frames")
 #COOLDOWN_FRAMES = 90  # 3秒 (30fps想定)
 COOLDOWN_FRAMES = 15
 
+BUCKET = "bear-camera-images"
+s3 = boto3.client("s3")
+
 def lambda_stub(frame, frame_id):
     """
-    Lambdaの代わり
+    Lambdaの代わりのスタブ。デバッグ用
     検知フレームを保存
     """
     OUTPUT_DIR.mkdir(exist_ok=True)
@@ -21,6 +25,29 @@ def lambda_stub(frame, frame_id):
 
     print(f"saved {filename}")
 
+
+def s3upload(frame):
+
+    # OpenCV frame → JPEGエンコード
+    success, buffer = cv2.imencode(".jpg", frame)
+
+    if not success:
+        raise Exception("JPEG encode failed")
+
+    # S3 key (ファイル名)
+    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+
+    key = f"camera01/{timestamp}.jpg"
+
+    # S3アップロード
+    s3.put_object(
+        Bucket=BUCKET,
+        Key=key,
+        Body=buffer.tobytes(),
+        ContentType="image/jpeg"
+    )
+
+    print("uploaded:", key)
 
 def main():
 
@@ -50,7 +77,8 @@ def main():
         if triggered and (frame_id - last_trigger_frame) >= COOLDOWN_FRAMES:
             for (x, y, w, h) in boxes:
                 roi = frame[y:y+h, x:x+w]
-            lambda_stub(roi, frame_id)
+            # lambda_stub(roi, frame_id)
+            s3upload(frame)
             last_trigger_frame = frame_id
 
         # 1秒 (30fps想定)ごとにデバッグ
